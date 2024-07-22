@@ -1,0 +1,278 @@
+-- 1. SELECT all data from the table
+SELECT * FROM crime_reports;
+
+-- 2. Rename columns for better clarity and consistency
+ALTER TABLE crime_reports 
+RENAME COLUMN `File Number` TO `file_num`,
+RENAME COLUMN `Date of Report` TO `report_date`,
+RENAME COLUMN `Crime Date Time` TO `crime_date`,
+RENAME COLUMN `Crime` TO `crime`,
+RENAME COLUMN `Reporting Area` TO `reporting_area`,
+RENAME COLUMN `Neighborhood` TO `neighborhood`,
+RENAME COLUMN `Location` TO `location`;
+
+-- 3. Count the number of records in the table
+SELECT COUNT(file_num) FROM crime_reports;
+
+-- 4. Check for duplicate records
+SELECT file_num, COUNT(file_num) AS count_of_files
+FROM crime_reports
+GROUP BY file_num
+HAVING count_of_files > 1;
+
+-- 5. Check for missing values in the 'location' column
+SELECT * FROM crime_reports
+WHERE location = '' OR location IS NULL;
+
+-- 6. Select records with 'Admin Error' in the 'crime' column
+SELECT * FROM crime_reports
+WHERE crime = 'Admin Error';
+
+-- 7. Count records with 'Admin Error' in the 'crime' column
+SELECT COUNT(*) FROM crime_reports
+WHERE crime = 'Admin Error';
+
+-- 8. Delete records with 'Admin Error' in the 'crime' column
+DELETE FROM crime_reports WHERE crime = 'Admin Error';
+
+-- 9. Delete records with missing 'location' data that cannot be reproduced
+DELETE FROM crime_reports
+WHERE location = '' OR location IS NULL OR location = 'Unknown';
+
+-- 10. Convert 'report_date' to a timestamp format
+SELECT *,
+       STR_TO_DATE(report_date, '%m/%d/%Y %h:%i:%s %p') AS report_date_timestamp
+FROM crime_reports;
+
+-- 11. Update 'report_date' with the converted timestamp format
+UPDATE crime_reports
+SET report_date = STR_TO_DATE(report_date, '%m/%d/%Y %h:%i:%s %p');
+
+-- 12. Convert and extract start and end times from 'crime_date'
+ALTER TABLE crime_reports
+ADD COLUMN crime_date_begin DATETIME,
+ADD COLUMN crime_date_end DATETIME;
+
+UPDATE crime_reports
+SET crime_date_begin = STR_TO_DATE(TRIM(SUBSTRING_INDEX(crime_date, '-', 1)), '%m/%d/%Y %H:%i'),
+    crime_date_end = STR_TO_DATE(TRIM(SUBSTRING_INDEX(crime_date, '-', -1)), '%m/%d/%Y %H:%i')
+WHERE crime_date IS NOT NULL
+AND TRIM(SUBSTRING_INDEX(crime_date, '-', 1)) != ''
+AND TRIM(SUBSTRING_INDEX(crime_date, '-', -1)) != ''
+AND STR_TO_DATE(TRIM(SUBSTRING_INDEX(crime_date, '-', 1)), '%m/%d/%Y %H:%i') IS NOT NULL
+AND STR_TO_DATE(TRIM(SUBSTRING_INDEX(crime_date, '-', -1)), '%m/%d/%Y %H:%i') IS NOT NULL;
+
+-- 13. Modify data types of various columns
+ALTER TABLE crime_reports
+MODIFY COLUMN report_date DATETIME,
+MODIFY COLUMN crime_date VARCHAR(50),
+MODIFY COLUMN crime VARCHAR(30),
+MODIFY COLUMN neighborhood VARCHAR(30),
+MODIFY COLUMN location VARCHAR(100);
+
+-- 14. Delete invalid 'crime_date' records
+DELETE FROM crime_reports WHERE (crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4}$')
+   OR (crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4} - [0-9]{2}/[0-9]{2}/[0-9]{4}$');
+
+-- 15. Create a temporary table to handle 'crime_date' format variations
+CREATE TEMPORARY TABLE temp_crime_dates AS
+SELECT 
+    file_num,
+    crime_date,
+    CASE
+        WHEN crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4}$' THEN STR_TO_DATE(crime_date, '%m/%d/%Y')
+        WHEN crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}$' THEN STR_TO_DATE(crime_date, '%m/%d/%Y %H:%i')
+        WHEN crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2} - [0-9]{2}:[0-9]{2}$' THEN STR_TO_DATE(
+            CONCAT(
+                SUBSTRING_INDEX(crime_date, ' ', 1), ' ',
+                SUBSTRING_INDEX(crime_date, ' ', -1)
+            ), '%m/%d/%Y %H:%i')
+        WHEN crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2} - [0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}$' THEN STR_TO_DATE(
+            SUBSTRING_INDEX(crime_date, ' - ', -1), '%m/%d/%Y %H:%i')
+        WHEN crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4} - [0-9]{2}/[0-9]{2}/[0-9]{4}$' THEN STR_TO_DATE(
+            SUBSTRING_INDEX(crime_date, ' - ', -1), '%m/%d/%Y')
+        ELSE NULL
+    END AS extracted_date
+FROM crime_reports;
+
+UPDATE crime_reports
+JOIN temp_crime_dates
+ON crime_reports.file_num = temp_crime_dates.file_num
+SET crime_reports.crime_date_end = temp_crime_dates.extracted_date;
+
+-- 16. Select records that match the original 'crime_date' format patterns
+SELECT * FROM crime_reports
+WHERE (crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4}$')
+   OR (crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4} - [0-9]{2}/[0-9]{2}/[0-9]{4}$');
+
+-- 17. Drop the 'crime_date' column after processing
+ALTER TABLE crime_reports
+DROP COLUMN crime_date;
+
+-- 18. Extract 'street', 'city', and 'state' from 'location' and add them as new columns
+ALTER TABLE crime_reports
+ADD COLUMN street VARCHAR(50),
+ADD COLUMN city VARCHAR(10),
+ADD COLUMN state VARCHAR(5);
+
+UPDATE crime_reports
+SET street = SUBSTRING_INDEX(location, ',', 1);
+UPDATE crime_reports
+SET state = SUBSTRING_INDEX(location, ',', -1);
+UPDATE crime_reports
+SET city = SUBSTRING_INDEX(SUBSTRING_INDEX(location, ',', 2), ',', -1);
+
+-- 19. Drop the 'location' column after extraction
+ALTER TABLE crime_reports
+DROP COLUMN location;
+
+-- 20. Add a 'country' column and set its value to 'USA'
+ALTER TABLE crime_reports
+ADD COLUMN country VARCHAR(5);
+
+UPDATE crime_reports
+SET country = 'USA';
+
+-- 21. Calculate crime duration and the time difference between crime and report, and categorize report status
+SSELECT
+    file_num,report_date,crime_date_begin,crime_date_end,crime, upper(street), reporting_area, neighborhood,
+    ABS(timestampdiff(week, crime_date_begin, crime_date_end)) AS crime_duration_week,
+    ABS(timestampdiff(hour, crime_date_begin, crime_date_end)) AS crime_duration_hr,
+    ABS(timestampdiff(minute, crime_date_begin, crime_date_end)) AS crime_duration_min,
+    timestampdiff(minute, crime_date_begin, report_date) AS crime_begin_report_min,
+    timestampdiff(minute, crime_date_end, report_date) AS 	crime_end_report_min,
+    CASE
+        WHEN SIGN(timestampdiff(minute, crime_date_begin, report_date)) = 1 AND SIGN(timestampdiff(minute, crime_date_end, report_date)) = 1 THEN 	'Report after crime'
+        WHEN SIGN(timestampdiff(minute, crime_date_begin, report_date)) = -1 AND SIGN(timestampdiff(minute, crime_date_end, report_date)) = -1 THEN 'Report before crime'
+        WHEN SIGN(timestampdiff(minute, crime_date_begin, report_date)) = 0 AND SIGN(timestampdiff(minute, crime_date_end, report_date)) = 0 THEN 	'Report/crime  no dur.'
+        WHEN SIGN(timestampdiff(minute, crime_date_begin, report_date)) = 1 AND SIGN(timestampdiff(minute, crime_date_end, report_date)) = -1 THEN 	'Report during crime'
+        WHEN SIGN(timestampdiff(minute, crime_date_begin, report_date)) = 1 AND SIGN(timestampdiff(minute, crime_date_end, report_date)) = 0 THEN 	'Report with crime end'
+        WHEN SIGN(timestampdiff(minute, crime_date_begin, report_date)) = 0 AND SIGN(timestampdiff(minute, crime_date_end, report_date)) = 1 THEN 	'Report with crime begin'
+        WHEN SIGN(timestampdiff(minute, crime_date_begin, report_date)) = 0 AND SIGN(timestampdiff(minute, crime_date_end, report_date)) = -1 THEN 	'Report with crime begin'
+		WHEN SIGN(timestampdiff(minute, crime_date_begin, report_date)) = 1 AND SIGN(timestampdiff(minute, crime_date_end, report_date)) = -1 THEN 	'Report after crime'
+        WHEN SIGN(timestampdiff(minute, crime_date_begin, report_date)) = -1 AND SIGN(timestampdiff(minute, crime_date_end, report_date)) = 0 THEN 	'Report with crime end'
+        WHEN SIGN(timestampdiff(minute, crime_date_begin, report_date)) = -1 AND SIGN(timestampdiff(minute, crime_date_end, report_date)) = 1 THEN 	'Report after crime'
+        ELSE 'Undefined'
+    END AS report_status
+FROM
+    crime_reports
+    WHERE    (timestamp(crime_date_begin) < timestamp(crime_date_end)) AND (YEAR(crime_date_begin) >= 2009 and YEAR(crime_date_end) >= 2009)  ;
+
+-- 22. Create a temporary table for further analysis
+CREATE TEMPORARY TABLE temp_crime_reports AS
+SELECT
+    file_num,
+    report_date,
+    crime_date_begin,
+    crime_date_end,
+    crime,
+    UPPER(street) AS street,
+    reporting_area,
+    neighborhood,
+    ABS(TIMESTAMPDIFF(WEEK, crime_date_begin, crime_date_end)) AS crime_duration_week,
+    ABS(TIMESTAMPDIFF(HOUR, crime_date_begin, crime_date_end)) AS crime_duration_hr,
+    ABS(TIMESTAMPDIFF(MINUTE, crime_date_begin, crime_date_end)) AS crime_duration_min,
+    TIMESTAMPDIFF(MINUTE, crime_date_begin, report_date) AS crime_begin_report_min,
+    TIMESTAMPDIFF(MINUTE, crime_date_end, report_date) AS crime_end_report_min,
+    CASE
+        WHEN SIGN(TIMESTAMPDIFF(MINUTE, crime_date_begin, report_date)) = 1 
+             AND SIGN(TIMESTAMPDIFF(MINUTE, crime_date_end, report_date)) = 1 THEN 'Report after crime'
+        WHEN SIGN(TIMESTAMPDIFF(MINUTE, crime_date_begin, report_date)) = -1 
+             AND SIGN(TIMESTAMPDIFF(MINUTE, crime_date_end, report_date)) = -1 THEN 'Report before crime'
+        WHEN SIGN(TIMESTAMPDIFF(MINUTE, crime_date_begin, report_date)) = 0 
+             AND SIGN(TIMESTAMPDIFF(MINUTE, crime_date_end, report_date)) = 0 THEN 'Report/crime no dur.'
+        WHEN SIGN(TIMESTAMPDIFF(MINUTE, crime_date_begin, report_date)) = 1 
+             AND SIGN(TIMESTAMPDIFF(MINUTE, crime_date_end, report_date)) = -1 THEN 'Report during crime'
+        WHEN SIGN(TIMESTAMPDIFF(MINUTE, crime_date_begin, report_date)) = 1 
+             AND SIGN(TIMESTAMPDIFF(MINUTE, crime_date_end, report_date)) = 0 THEN 'Report with crime end'
+        WHEN SIGN(TIMESTAMPDIFF(MINUTE, crime_date_begin, report_date)) = 0 
+             AND SIGN(TIMESTAMPDIFF(MINUTE, crime_date_end, report_date)) = 1 THEN 'Report with crime begin'
+        WHEN SIGN(TIMESTAMPDIFF(MINUTE, crime_date_begin, report_date)) = 0 
+             AND SIGN(TIMESTAMPDIFF(MINUTE, crime_date_end, report_date)) = -1 THEN 'Report with crime begin'
+        WHEN SIGN(TIMESTAMPDIFF(MINUTE, crime_date_begin, report_date)) = 1 
+             AND SIGN(TIMESTAMPDIFF(MINUTE, crime_date_end, report_date)) = -1 THEN 'Report after crime'
+        WHEN SIGN(TIMESTAMPDIFF(MINUTE, crime_date_begin, report_date)) = -1 
+             AND SIGN(TIMESTAMPDIFF(MINUTE, crime_date_end, report_date)) = 0 THEN 'Report with crime end'
+        WHEN SIGN(TIMESTAMPDIFF(MINUTE, crime_date_begin, report_date)) = -1 
+             AND SIGN(TIMESTAMPDIFF(MINUTE, crime_date_end, report_date)) = 1 THEN 'Report after crime'
+        ELSE 'Undefined'
+    END AS report_status
+FROM
+    crime_reports
+WHERE
+    TIMESTAMP(crime_date_begin) < TIMESTAMP(crime_date_end)
+    AND YEAR(crime_date_begin) >= 2009
+    AND YEAR(crime_date_end) >= 2009;
+
+-- 23. Drop temporary table if exists
+DROP TEMPORARY TABLE IF EXISTS temp_crime_reports;
+
+-- 24. Create temporary table
+SELECT * FROM temp_crime_reports;
+
+-- 25. Frequency analysis of crime types (Top 10)
+SELECT crime, COUNT(crime) AS count_crime
+FROM temp_crime_reports
+GROUP BY crime
+ORDER BY count_crime DESC
+LIMIT 10;
+
+-- 26. Temporal distribution of crimes based on 'crime_date_begin'
+SELECT 
+    CASE
+        WHEN HOUR(crime_date_begin) BETWEEN 0 AND 5 THEN 'Midnight to Dawn'
+        WHEN HOUR(crime_date_begin) BETWEEN 6 AND 11 THEN 'Morning'
+        WHEN HOUR(crime_date_begin) BETWEEN 12 AND 17 THEN 'Afternoon'
+        WHEN HOUR(crime_date_begin) BETWEEN 18 AND 23 THEN 'Evening'
+    END AS time_of_day,
+    COUNT(*) AS crime_count
+FROM temp_crime_reports
+GROUP BY time_of_day
+ORDER BY crime_count DESC;
+
+-- 27. Average duration of crimes based on 'crime_duration_min'
+WITH crime_cte AS (
+    SELECT crime, AVG(crime_duration_min) AS avg_case_duration, MAX(crime_duration_min) AS max_duration, MIN(crime_duration_min) AS min_duration
+    FROM temp_crime_reports
+    GROUP BY crime
+    ORDER BY avg_case_duration DESC
+) 
+SELECT *, ROUND(avg_case_duration/60) AS avg_case_duration_in_hours
+FROM crime_cte;
+
+-- 28. Crime frequency by neighborhood
+SELECT neighborhood, COUNT(*) AS crime_count 
+FROM temp_crime_reports 
+GROUP BY neighborhood 
+ORDER BY crime_count DESC;
+
+-- 29. Distribution of 'report_status' across different crime types
+SELECT report_status, COUNT(*) AS status_count 
+FROM temp_crime_reports 
+GROUP BY report_status 
+ORDER BY status_count DESC;
+
+-- 30. Crime frequency by day of the week
+SELECT DAYNAME(crime_date_begin) AS weekday, COUNT(*) AS crime_count 
+FROM temp_crime_reports 
+GROUP BY weekday 
+ORDER BY crime_count DESC;
+
+-- 31. Crime frequency by street with categorization
+WITH cte AS ( 
+    SELECT street, COUNT(*) AS crime_count 
+    FROM crime_reports 
+    GROUP BY street 
+    ORDER BY crime_count DESC
+) 
+SELECT street, crime_count,
+       AVG(crime_count) OVER() AS avg_crime_count,
+       CASE
+           WHEN crime_count >= 1000 THEN 'very high crime rate'
+           WHEN crime_count >= 100 THEN 'high crime rate'
+           WHEN crime_count > 50 THEN 'moderate crime rate'
+           WHEN crime_count > 20 THEN 'below average crime rate'
+           WHEN crime_count > 10 THEN 'low crime rate'
+           ELSE 'negligible crime rate'
+       END AS crime_rate_category
+FROM cte;
