@@ -204,20 +204,17 @@ WHERE
     AND YEAR(crime_date_begin) >= 2009
     AND YEAR(crime_date_end) >= 2009;
 
--- 23. Drop temporary table if exists
-DROP TEMPORARY TABLE IF EXISTS temp_crime_reports;
-
--- 24. Create temporary table
+-- 23. view temporary table
 SELECT * FROM temp_crime_reports;
 
--- 25. Frequency analysis of crime types (Top 10)
+-- 24. Frequency analysis of crime types (Top 10)
 SELECT crime, COUNT(crime) AS count_crime
 FROM temp_crime_reports
 GROUP BY crime
 ORDER BY count_crime DESC
 LIMIT 10;
 
--- 26. Temporal distribution of crimes based on 'crime_date_begin'
+-- 25. Temporal distribution of crimes based on 'crime_date_begin'
 SELECT 
     CASE
         WHEN HOUR(crime_date_begin) BETWEEN 0 AND 5 THEN 'Midnight to Dawn'
@@ -230,7 +227,7 @@ FROM temp_crime_reports
 GROUP BY time_of_day
 ORDER BY crime_count DESC;
 
--- 27. Average duration of crimes based on 'crime_duration_min'
+-- 26. Average duration of crimes based on 'crime_duration_min'
 WITH crime_cte AS (
     SELECT crime, AVG(crime_duration_min) AS avg_case_duration, MAX(crime_duration_min) AS max_duration, MIN(crime_duration_min) AS min_duration
     FROM temp_crime_reports
@@ -240,25 +237,25 @@ WITH crime_cte AS (
 SELECT *, ROUND(avg_case_duration/60) AS avg_case_duration_in_hours
 FROM crime_cte;
 
--- 28. Crime frequency by neighborhood
+-- 27. Crime frequency by neighborhood
 SELECT neighborhood, COUNT(*) AS crime_count 
 FROM temp_crime_reports 
 GROUP BY neighborhood 
 ORDER BY crime_count DESC;
 
--- 29. Distribution of 'report_status' across different crime types
+-- 28. Distribution of 'report_status' across different crime types
 SELECT report_status, COUNT(*) AS status_count 
 FROM temp_crime_reports 
 GROUP BY report_status 
 ORDER BY status_count DESC;
 
--- 30. Crime frequency by day of the week
+-- 29. Crime frequency by day of the week
 SELECT DAYNAME(crime_date_begin) AS weekday, COUNT(*) AS crime_count 
 FROM temp_crime_reports 
 GROUP BY weekday 
 ORDER BY crime_count DESC;
 
--- 31. Crime frequency by street with categorization
+-- 30. Crime frequency by street with categorization
 WITH cte AS ( 
     SELECT street, COUNT(*) AS crime_count 
     FROM crime_reports 
