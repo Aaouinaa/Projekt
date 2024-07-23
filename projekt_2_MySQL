@@ -1,3 +1,7 @@
+Data:
+https://www.kaggle.com/datasets/melissamonfared/cambridge-crime-data-2009-2024
+
+
 -- 1. SELECT all data from the table
 SELECT * FROM crime_reports;
 
