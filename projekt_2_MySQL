@@ -2,10 +2,10 @@ Data:
 https://www.kaggle.com/datasets/melissamonfared/cambridge-crime-data-2009-2024
 
 
--- 1. SELECT all data from the table
+--  SELECT all data from the table
 SELECT * FROM crime_reports;
 
--- 2. Rename columns for better clarity and consistency
+-- Rename columns for better clarity and consistency
 ALTER TABLE crime_reports 
 RENAME COLUMN `File Number` TO `file_num`,
 RENAME COLUMN `Date of Report` TO `report_date`,
@@ -15,44 +15,44 @@ RENAME COLUMN `Reporting Area` TO `reporting_area`,
 RENAME COLUMN `Neighborhood` TO `neighborhood`,
 RENAME COLUMN `Location` TO `location`;
 
--- 3. Count the number of records in the table
+--  Count the number of records in the table
 SELECT COUNT(file_num) FROM crime_reports;
 
--- 4. Check for duplicate records
+--  Check for duplicate records
 SELECT file_num, COUNT(file_num) AS count_of_files
 FROM crime_reports
 GROUP BY file_num
 HAVING count_of_files > 1;
 
--- 5. Check for missing values in the 'location' column
+-- Check for missing values in the 'location' column
 SELECT * FROM crime_reports
 WHERE location = '' OR location IS NULL;
 
--- 6. Select records with 'Admin Error' in the 'crime' column
+-- Select records with 'Admin Error' in the 'crime' column
 SELECT * FROM crime_reports
 WHERE crime = 'Admin Error';
 
--- 7. Count records with 'Admin Error' in the 'crime' column
+--  Count records with 'Admin Error' in the 'crime' column
 SELECT COUNT(*) FROM crime_reports
 WHERE crime = 'Admin Error';
 
--- 8. Delete records with 'Admin Error' in the 'crime' column
+--  Delete records with 'Admin Error' in the 'crime' column
 DELETE FROM crime_reports WHERE crime = 'Admin Error';
 
--- 9. Delete records with missing 'location' data that cannot be reproduced
+--  Delete records with missing 'location' data that cannot be reproduced
 DELETE FROM crime_reports
 WHERE location = '' OR location IS NULL OR location = 'Unknown';
 
--- 10. Convert 'report_date' to a timestamp format
+--  Convert 'report_date' to a timestamp format
 SELECT *,
        STR_TO_DATE(report_date, '%m/%d/%Y %h:%i:%s %p') AS report_date_timestamp
 FROM crime_reports;
 
--- 11. Update 'report_date' with the converted timestamp format
+--  Update 'report_date' with the converted timestamp format
 UPDATE crime_reports
 SET report_date = STR_TO_DATE(report_date, '%m/%d/%Y %h:%i:%s %p');
 
--- 12. Convert and extract start and end times from 'crime_date'
+-- Convert and extract start and end times from 'crime_date'
 ALTER TABLE crime_reports
 ADD COLUMN crime_date_begin DATETIME,
 ADD COLUMN crime_date_end DATETIME;
@@ -66,7 +66,7 @@ AND TRIM(SUBSTRING_INDEX(crime_date, '-', -1)) != ''
 AND STR_TO_DATE(TRIM(SUBSTRING_INDEX(crime_date, '-', 1)), '%m/%d/%Y %H:%i') IS NOT NULL
 AND STR_TO_DATE(TRIM(SUBSTRING_INDEX(crime_date, '-', -1)), '%m/%d/%Y %H:%i') IS NOT NULL;
 
--- 13. Modify data types of various columns
+--  Modify data types of various columns
 ALTER TABLE crime_reports
 MODIFY COLUMN report_date DATETIME,
 MODIFY COLUMN crime_date VARCHAR(50),
@@ -74,11 +74,11 @@ MODIFY COLUMN crime VARCHAR(30),
 MODIFY COLUMN neighborhood VARCHAR(30),
 MODIFY COLUMN location VARCHAR(100);
 
--- 14. Delete invalid 'crime_date' records
+--  Delete invalid 'crime_date' records
 DELETE FROM crime_reports WHERE (crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4}$')
    OR (crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4} - [0-9]{2}/[0-9]{2}/[0-9]{4}$');
 
--- 15. Create a temporary table to handle 'crime_date' format variations
+--  Create a temporary table to handle 'crime_date' format variations
 CREATE TEMPORARY TABLE temp_crime_dates AS
 SELECT 
     file_num,
@@ -104,16 +104,16 @@ JOIN temp_crime_dates
 ON crime_reports.file_num = temp_crime_dates.file_num
 SET crime_reports.crime_date_end = temp_crime_dates.extracted_date;
 
--- 16. Select records that match the original 'crime_date' format patterns
+--  Select records that match the original 'crime_date' format patterns
 SELECT * FROM crime_reports
 WHERE (crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4}$')
    OR (crime_date REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4} - [0-9]{2}/[0-9]{2}/[0-9]{4}$');
 
--- 17. Drop the 'crime_date' column after processing
+--  Drop the 'crime_date' column after processing
 ALTER TABLE crime_reports
 DROP COLUMN crime_date;
 
--- 18. Extract 'street', 'city', and 'state' from 'location' and add them as new columns
+--  Extract 'street', 'city', and 'state' from 'location' and add them as new columns
 ALTER TABLE crime_reports
 ADD COLUMN street VARCHAR(50),
 ADD COLUMN city VARCHAR(10),
@@ -126,18 +126,11 @@ SET state = SUBSTRING_INDEX(location, ',', -1);
 UPDATE crime_reports
 SET city = SUBSTRING_INDEX(SUBSTRING_INDEX(location, ',', 2), ',', -1);
 
--- 19. Drop the 'location' column after extraction
+--  Drop the 'location' column after extraction
 ALTER TABLE crime_reports
 DROP COLUMN location;
 
--- 20. Add a 'country' column and set its value to 'USA'
-ALTER TABLE crime_reports
-ADD COLUMN country VARCHAR(5);
-
-UPDATE crime_reports
-SET country = 'USA';
-
--- 21. Calculate crime duration and the time difference between crime and report, and categorize report status
+--  Calculate crime duration and the time difference between crime and report, and categorize report status
 SSELECT
     file_num,report_date,crime_date_begin,crime_date_end,crime, upper(street), reporting_area, neighborhood,
     ABS(timestampdiff(week, crime_date_begin, crime_date_end)) AS crime_duration_week,
@@ -162,7 +155,7 @@ FROM
     crime_reports
     WHERE    (timestamp(crime_date_begin) < timestamp(crime_date_end)) AND (YEAR(crime_date_begin) >= 2009 and YEAR(crime_date_end) >= 2009)  ;
 
--- 22. Create a temporary table for further analysis
+--  Create a temporary table for further analysis
 CREATE TEMPORARY TABLE temp_crime_reports AS
 SELECT
     file_num,
@@ -208,17 +201,17 @@ WHERE
     AND YEAR(crime_date_begin) >= 2009
     AND YEAR(crime_date_end) >= 2009;
 
--- 23. view temporary table
+--  view temporary table
 SELECT * FROM temp_crime_reports;
 
--- 24. Frequency analysis of crime types (Top 10)
+--  Frequency analysis of crime types (Top 10)
 SELECT crime, COUNT(crime) AS count_crime
 FROM temp_crime_reports
 GROUP BY crime
 ORDER BY count_crime DESC
 LIMIT 10;
 
--- 25. Temporal distribution of crimes based on 'crime_date_begin'
+--  Temporal distribution of crimes based on 'crime_date_begin'
 SELECT 
     CASE
         WHEN HOUR(crime_date_begin) BETWEEN 0 AND 5 THEN 'Midnight to Dawn'
@@ -231,7 +224,7 @@ FROM temp_crime_reports
 GROUP BY time_of_day
 ORDER BY crime_count DESC;
 
--- 26. Average duration of crimes based on 'crime_duration_min'
+--  Average duration of crimes based on 'crime_duration_min'
 WITH crime_cte AS (
     SELECT crime, AVG(crime_duration_min) AS avg_case_duration, MAX(crime_duration_min) AS max_duration, MIN(crime_duration_min) AS min_duration
     FROM temp_crime_reports
@@ -241,25 +234,25 @@ WITH crime_cte AS (
 SELECT *, ROUND(avg_case_duration/60) AS avg_case_duration_in_hours
 FROM crime_cte;
 
--- 27. Crime frequency by neighborhood
+--  Crime frequency by neighborhood
 SELECT neighborhood, COUNT(*) AS crime_count 
 FROM temp_crime_reports 
 GROUP BY neighborhood 
 ORDER BY crime_count DESC;
 
--- 28. Distribution of 'report_status' across different crime types
+--  Distribution of 'report_status' across different crime types
 SELECT report_status, COUNT(*) AS status_count 
 FROM temp_crime_reports 
 GROUP BY report_status 
 ORDER BY status_count DESC;
 
--- 29. Crime frequency by day of the week
+--  Crime frequency by day of the week
 SELECT DAYNAME(crime_date_begin) AS weekday, COUNT(*) AS crime_count 
 FROM temp_crime_reports 
 GROUP BY weekday 
 ORDER BY crime_count DESC;
 
--- 30. Crime frequency by street with categorization
+--  Crime frequency by street with categorization
 WITH cte AS ( 
     SELECT street, COUNT(*) AS crime_count 
     FROM crime_reports 
